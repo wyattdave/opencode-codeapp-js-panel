@@ -1,0 +1,61 @@
+{
+  "name": "codeapp-js-opencode",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for Power Platform Code Apps: side panel, slash commands, and agent tools",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./rpc": "./rpc.mjs",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "files": [
+    "index.mjs",
+    "rpc.mjs",
+    "runner.mjs",
+    "restore.mjs",
+    "commands.js",
+    "queue.js",
+    "resources.js",
+    "workspace.js",
+    "src",
+    "dist",
+    "test"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm test && npm run typecheck && npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wyattdave/opencode-codeapp-js-panel.git"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "power-platform",
+    "power-apps",
+    "code-app",
+    "dataverse"
+  ],
+  "author": "David Wyatt <davedidisco@gmail.com>",
+  "dependencies": {
+    "@opencode/plugin": "^2.2.0",
+    "codeapp-js": "^2.3.1",
+    "codeapp-js-cli": "^1.3.1",
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "solid-js": "^1.9.9",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vite-plugin-solid": "^2.11.8"
+  }
+}
