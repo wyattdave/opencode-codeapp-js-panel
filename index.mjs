@@ -18,11 +18,15 @@ const fields = {
   displayName: string('Dataverse table display name'),
   pluralName: string('Dataverse table plural display name'),
   primaryDisplayName: string('Primary name column label'),
+  schemaName: string('Dataverse table schema name'),
+  ownershipType: { type: 'string', enum: ['UserOwned', 'OrganizationOwned'], description: 'Dataverse table ownership' },
+  logoPath: string('App logo path for workspace setup'),
+  skill: string('Bundled skill name to read; omit to list available skills'),
   app: string('Existing Code App name or app ID to import'),
   target: string('Environment ID or Dynamics URL to select'),
   solutionId: string('Solution ID for deployment'),
   appDisplayName: string('Name for the new Code App'),
-  description: string('Description for the new Code App'),
+  description: string('Description for the new Code App or Dataverse table'),
   fields: { type: 'array', items: string('Column spec: Name:type[:details]'), description: 'Dataverse table columns' },
   skills: { type: 'boolean', description: 'Copy bundled Code App skills into .opencode/skills' },
   debugger: { type: 'boolean', description: 'Enable the debugger when deploying' },
@@ -30,16 +34,19 @@ const fields = {
 
 const definitions = {
   'sign-in': ['Sign in to Power Apps without creating an app or sending a chat message', ['cloud']],
+  'change-account': ['Clear cached authentication and sign in with the account picker', ['cloud']],
+  'sign-out': ['Clear the cached Power Platform login', []],
+  skills: ['List bundled Code App skills or read a skill by name', ['skill']],
   deploy: ['Push the Code App to Power Platform', ['environment', 'cloud', 'solutionId', 'debugger']],
-  debugger: ['Enable debugger bootstrap and deploy the Code App', ['environment', 'cloud', 'solutionId']],
+  debugger: ['Toggle debugger bootstrap in the current app build without deploying', []],
   'add-dataverse': ['Add a Dataverse table data source', ['table', 'environment'], ['table']],
   'add-connector': ['Add a Power Platform connector', ['apiName', 'environment'], ['apiName']],
   'add-flow': ['Add an existing Power Automate flow by ID', ['flowId', 'environment'], ['flowId']],
   'add-environment-variable': ['Create a Dataverse JSON environment variable', ['name', 'publisherPrefix', 'value', 'environment'], ['name', 'publisherPrefix', 'value']],
-  'create-table': ['Create a Dataverse table and optional columns', ['displayName', 'pluralName', 'primaryDisplayName', 'publisherPrefix', 'fields', 'environment'], ['displayName']],
+  'create-table': ['Create a Dataverse table and optional columns', ['displayName', 'pluralName', 'primaryDisplayName', 'publisherPrefix', 'schemaName', 'ownershipType', 'description', 'fields', 'environment'], ['displayName']],
   'list-mockups': ['List HTML mockups in agent/ without opening a browser', []],
   import: ['Import an existing Code App into the current workspace', ['app', 'environment'], ['app']],
-  setup: ['Copy bundled codeapp-js template and install the Code App agent; optionally include skills', ['appDisplayName', 'description', 'skills']],
+  setup: ['Copy bundled codeapp-js template and install the Code App agent; optionally include skills', ['appDisplayName', 'description', 'logoPath', 'environment', 'skills']],
   'change-environment': ['List Power Platform environments or select one by ID or URL', ['target', 'cloud']],
 };
 
@@ -80,7 +87,7 @@ export default Plugin.define({
             required: required || [],
             additionalProperties: false,
           },
-          options: { namespace: 'cap', codemode: true, permission: name === 'list-mockups' ? 'cap_read' : 'cap_mutation' },
+          options: { namespace: 'cap', codemode: true, permission: ['list-mockups', 'skills'].includes(name) ? 'cap_read' : 'cap_mutation' },
           execute: async (input) => {
             const result = await queue.exclusive(() => commands.execute(name, input, cwd));
             return { content: JSON.stringify(result ?? { completed: true }, null, 2) };

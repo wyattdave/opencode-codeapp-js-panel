@@ -12,7 +12,7 @@ export const Cap = Rpc.define(/** @type {const} */ ({
       input: {
         type: 'object',
         properties: {
-          name: { type: 'string', enum: ['sign-in', 'deploy', 'debugger', 'add-dataverse', 'add-connector', 'add-flow', 'add-environment-variable', 'create-table', 'list-mockups', 'import', 'setup', 'change-environment'] },
+          name: { type: 'string', enum: ['sign-in', 'change-account', 'sign-out', 'skills', 'deploy', 'debugger', 'add-dataverse', 'add-connector', 'add-flow', 'add-environment-variable', 'create-table', 'list-mockups', 'import', 'setup', 'change-environment'] },
           input: { type: 'object' },
         },
         required: ['name', 'input'], additionalProperties: false,
@@ -23,7 +23,7 @@ export const Cap = Rpc.define(/** @type {const} */ ({
       input: {
         type: 'object',
         properties: {
-          kind: { type: 'string', enum: ['environments', 'tables', 'connectors', 'flows', 'apps', 'mockups'] },
+          kind: { type: 'string', enum: ['environments', 'tables', 'connectors', 'flows', 'apps', 'mockups', 'skills'] },
           environment: { type: 'string' }, cloud: { type: 'string' },
         },
         required: ['kind'], additionalProperties: false,

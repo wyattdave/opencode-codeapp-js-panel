@@ -67,7 +67,7 @@ export function CodeAppPanel(props: { ctx: any; session?: MountedSession; direct
     setBusy(true); props.onBusy?.(true); setError(''); setResult(''); setMessage(`${operation.label}…`)
     try {
       // Mutation consent is still required; there is no duplicate action button.
-      if (operation.name !== 'sign-in') {
+      if (!['sign-in', 'skills'].includes(operation.name)) {
         if (!await props.ctx.dialogs.confirm({ title: operation.action, description: `${operation.description}\nWorkspace: ${props.directory}\nEnvironment: ${String(input.target || environment() || 'workspace configuration')}`, confirm: operation.action })) {
           setMessage('Cancelled — nothing was changed.'); return
         }
@@ -76,7 +76,7 @@ export function CodeAppPanel(props: { ctx: any; session?: MountedSession; direct
       if (operation.name === 'change-environment' && typeof input.target === 'string') {
         props.ctx.stores.workspace.update((value: any) => { value.environment = input.target })
       }
-      setResult(output); setMessage(`${operation.label} completed.`)
+      setResult(operation.name === 'skills' ? JSON.parse(output).content : output); setMessage(`${operation.label} completed.`)
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); setMessage('') }
     finally { setBusy(false); props.onBusy?.(false) }
   }
@@ -130,7 +130,7 @@ export function CodeAppPanel(props: { ctx: any; session?: MountedSession; direct
         <Show when={operation.name === 'list-mockups'}><ResourceList label="Mockups" busy={busy()} load={() => load('mockups')} choose={(file) => void openMockup(file)} /></Show>
         <Show when={message()}><div class="cap-progress" role="status" aria-live="polite"><Show when={busy()}><Spinner /></Show>{message()}</div></Show>
         <Show when={error()}><div class="cap-error" role="alert">{error()}</div></Show>
-        <Show when={result()}><details class="cap-result"><summary>Operation details</summary><pre>{result()}</pre></details></Show>
+        <Show when={result()}><details class="cap-result" open={operation.name === 'skills'}><summary>Operation details</summary><pre>{result()}</pre></details></Show>
       </div>}</Show>
     </section>}</For>
   </div>

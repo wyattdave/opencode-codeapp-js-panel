@@ -41,6 +41,54 @@ async function inspectWorkspace(cwd) {
   return { isCodeApp: false };
 }
 
+async function listSkills() {
+  const root = path.join(codeappRoot(), 'AI', 'skills');
+  const skills = [];
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    if (entry.isDirectory() && await exists(path.join(root, entry.name, 'SKILL.md'))) skills.push(entry.name);
+  }
+  return skills.sort();
+}
+
+async function readSkill(name) {
+  // Only allow a known bundled skill, never an arbitrary path from RPC input.
+  if (!(await listSkills()).includes(name)) throw new Error(`Unknown bundled skill: ${name}`);
+  return { name, content: await fs.readFile(path.join(codeappRoot(), 'AI', 'skills', name, 'SKILL.md'), 'utf8') };
+}
+
+async function powerConfigPath(cwd) {
+  for (const file of ['power.config.json', 'setup/power.config.json']) {
+    const candidate = path.join(cwd, file);
+    if (await exists(candidate)) return candidate;
+  }
+}
+
+const debuggerSnippet = "import { enableDebugger } from './codeapp.js';\nenableDebugger();\n";
+
+async function toggleDebugger(cwd) {
+  const configPath = await powerConfigPath(cwd);
+  const candidates = [];
+  if (configPath) {
+    const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+    const root = path.dirname(configPath);
+    if (config.buildPath) candidates.push(path.resolve(root, config.buildPath, 'index.js'));
+    if (config.buildEntryPoint) candidates.push(path.resolve(root, config.buildPath || '', path.dirname(config.buildEntryPoint), 'index.js'));
+  }
+  candidates.push(path.join(cwd, 'dist', 'index.js'), path.join(cwd, 'index.js'));
+  for (const indexPath of candidates) {
+    if (!await exists(indexPath)) continue;
+    const content = await fs.readFile(indexPath, 'utf8');
+    const enabled = content.includes("import { enableDebugger } from './codeapp.js';") && content.includes('enableDebugger();');
+    const updated = enabled
+      ? content.replace(/^import \{ enableDebugger \} from '\.\/codeapp\.js';\r?\nenableDebugger\(\);\r?\n(?:\r?\n)?/, '')
+      : `${debuggerSnippet}\n${content}`;
+    if (enabled && updated === content) throw new Error('Debugger snippet is not at the start of index.js; remove it manually to preserve custom code.');
+    await fs.writeFile(indexPath, updated, 'utf8');
+    return { enabled: !enabled, indexPath };
+  }
+  throw new Error('index.js was not found in the current app build path.');
+}
+
 async function ensureCodeappWorkspace(cwd, options = {}) {
   const root = codeappRoot();
   const agentPath = path.join(cwd, '.opencode', 'agents', 'codeapp.md');
@@ -93,8 +141,16 @@ async function setupWorkspace(options = {}) {
     ...current,
     appDisplayName: options.appDisplayName || current.appDisplayName || '',
     description: options.description || current.description || '',
+    ...(options.logoPath !== undefined ? { logoPath: options.logoPath } : {}),
+    ...(options.environment ? { environmentId: options.environment } : {}),
   };
   await fs.writeFile(configPath, `${JSON.stringify(updated, null, 2)}\n`, 'utf8');
+  const entryPath = path.resolve(path.dirname(configPath), updated.buildPath || '', updated.buildEntryPoint || 'index.html');
+  if (updated.appDisplayName && await exists(entryPath)) {
+    const html = await fs.readFile(entryPath, 'utf8');
+    const title = updated.appDisplayName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    await fs.writeFile(entryPath, html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${title}</title>`), 'utf8');
+  }
   return {
     destination: cwd,
     configPath,
@@ -118,4 +174,4 @@ async function copyIfAbsentFromContent(content, destination) {
   }
 }
 
-module.exports = { ensureCodeappWorkspace, setupWorkspace, inspectWorkspace };
+module.exports = { ensureCodeappWorkspace, setupWorkspace, inspectWorkspace, listSkills, readSkill, toggleDebugger };

@@ -1,10 +1,10 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const core = require('codeapp-js-cli');
-const { setupWorkspace } = require('./workspace');
+const { setupWorkspace, inspectWorkspace, listSkills, readSkill, toggleDebugger } = require('./workspace');
 
 const names = [
-  'sign-in',
+  'sign-in', 'change-account', 'sign-out', 'skills',
   'deploy', 'debugger', 'add-dataverse', 'add-connector', 'add-flow',
   'add-environment-variable', 'create-table', 'list-mockups', 'import',
   'setup', 'change-environment',
@@ -28,6 +28,7 @@ function argumentsFor(name, text) {
     '--display-name': 'displayName', '--plural-name': 'pluralName',
     '--primary-display-name': 'primaryDisplayName', '--field': 'field',
     '--app-name': 'appDisplayName', '--description': 'description',
+    '--schema-name': 'schemaName', '--ownership': 'ownershipType', '--logo-path': 'logoPath',
   };
   const positionals = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -48,6 +49,7 @@ function argumentsFor(name, text) {
     else if (name === 'add-flow') input.flowId = positionals.join(' ');
     else if (name === 'import') input.app = positionals.join(' ');
     else if (name === 'change-environment') input.target = positionals.join(' ');
+    else if (name === 'skills') input.skill = positionals.join(' ');
     else if (name === 'create-table') input.displayName ??= positionals.join(' ');
     else if (name !== 'list-mockups') throw new Error(`Unexpected argument: ${positionals.join(' ')}`);
   }
@@ -92,14 +94,21 @@ async function execute(name, input = {}, cwd = process.cwd(), api = core) {
   const options = { cwd, namedArgs: { environment: input.environment } };
   switch (name) {
     case 'sign-in':
-      return api.capAuth({ cwd, namedArgs: { cloud: input.cloud } });
-    case 'deploy':
-    case 'debugger': {
-      const passthroughArgs = [];
+      return api.capAuth([], { cwd, namedArgs: { cloud: input.cloud } });
+    case 'change-account':
+      return api.capAuth([], { cwd, namedArgs: { cloud: input.cloud, change: true } });
+    case 'sign-out':
+      return api.capAuth([], { cwd, namedArgs: { logout: true } });
+    case 'skills':
+      return input.skill ? readSkill(input.skill) : listSkills();
+    case 'debugger':
+      return toggleDebugger(cwd);
+    case 'deploy': {
+      const passthroughArgs = ['--non-interactive'];
       if (input.environment) passthroughArgs.push('--environment-id', input.environment);
       if (input.cloud) passthroughArgs.push('--cloud', input.cloud);
       if (input.solutionId) passthroughArgs.push('--solution-id', input.solutionId);
-      return api.capDeploy({ cwd, debugger: name === 'debugger' || input.debugger === true, passthroughArgs });
+      return api.capDeploy({ cwd, debugger: input.debugger === true, passthroughArgs });
     }
     case 'add-dataverse':
       return api.capDataverse(required(input.table, 'Table logical name'), { ...options, preserveGeneratedArtifacts: true });
@@ -108,7 +117,7 @@ async function execute(name, input = {}, cwd = process.cwd(), api = core) {
     case 'add-flow':
       return api.capFlow(required(input.flowId, 'Flow ID'), {
         cwd, preserveGeneratedArtifacts: true,
-        passthroughArgs: input.environment ? ['--environment-id', input.environment] : [],
+        passthroughArgs: ['--non-interactive', ...(input.environment ? ['--environment-id', input.environment] : [])],
       });
     case 'add-environment-variable':
       return api.createJsonEnvironmentVariable({
@@ -121,6 +130,9 @@ async function execute(name, input = {}, cwd = process.cwd(), api = core) {
         displayName: required(input.displayName, 'Table display name'),
         pluralName: input.pluralName,
         primaryDisplayName: input.primaryDisplayName,
+        schemaName: input.schemaName,
+        ownershipType: input.ownershipType,
+        description: input.description,
         publisherPrefix: input.publisherPrefix,
         fields: input.fields?.map((field) => typeof field === 'string' ? parseField(field) : field),
       }, { cwd, environment: input.environment });
@@ -129,9 +141,12 @@ async function execute(name, input = {}, cwd = process.cwd(), api = core) {
     case 'import':
       return api.capImport(required(input.app, 'Code app name or ID'), options);
     case 'setup':
-      return setupWorkspace({ cwd, skills: input.skills === true, appDisplayName: input.appDisplayName, description: input.description });
+      return setupWorkspace({ cwd, skills: input.skills === true, appDisplayName: input.appDisplayName, description: input.description, logoPath: input.logoPath, environment: input.environment });
     case 'change-environment':
       if (!input.target) return api.listEnvironments({ cwd, region: input.cloud });
+      // Like the editor extension, selecting an environment before setup must
+      // not create power.config.json (which would opt an unrelated folder in).
+      if (!(await inspectWorkspace(cwd)).isCodeApp) return { name: input.target, configUpdated: false };
       return api.capEnvironment(input.target, { cwd, namedArgs: { cloud: input.cloud } });
     default:
       throw new Error(`Unknown CAP operation: ${name}`);

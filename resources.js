@@ -9,6 +9,8 @@ async function list(kind, input = {}, cwd = process.cwd(), api = core) {
       return records.map((item) => ({ value: item.name, label: item.displayName || item.name, detail: item.dynamicsUrl || item.name }));
     case 'mockups':
       return (await commands.execute('list-mockups', {}, cwd, api)).map((file) => ({ value: file, label: file, detail: 'Workspace mockup' }));
+    case 'skills':
+      return (await commands.execute('skills', {}, cwd, api)).map((name) => ({ value: name, label: name, detail: 'Bundled codeapp-js skill' }));
     case 'tables': case 'connectors': case 'flows': case 'apps':
       records = await api.listPowerPlatformResources(kind, { cwd, environment: input.environment });
       break;

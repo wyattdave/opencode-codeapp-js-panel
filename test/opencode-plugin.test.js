@@ -28,6 +28,14 @@ test('all requested operations are registered and dispatch to Power Apps functio
   }
   assert.equal(tools.get('add_dataverse').input.required[0], 'table');
   assert.equal(tools.get('setup').options.namespace, 'cap');
+  assert.equal(tools.get('skills').options.permission, 'cap_read');
+  assert.equal(tools.get('change_account').options.permission, 'cap_mutation');
+  assert.equal(tools.get('sign_out').options.permission, 'cap_mutation');
+  assert.deepEqual(tools.get('debugger').input.properties, {});
+  assert.ok(tools.get('setup').input.properties.environment);
+  assert.ok(tools.get('create_table').input.properties.schemaName);
+  assert.deepEqual(tools.get('create_table').input.properties.ownershipType.enum, ['UserOwned', 'OrganizationOwned']);
+  assert.deepEqual(rpc.definition.methods.execute.input.properties.name.enum.slice().sort(), commands.names.slice().sort());
   await installed.get('cap-list-mockups').execute({ sessionID: 'test', prompt: { text: '' } });
   assert.equal(messages[0].sessionID, 'test');
   assert.equal(rpc.definition.id, 'codeapp-js');
@@ -44,16 +52,14 @@ test('slash arguments route environment, fields, and deployment debugger correct
     createDataverseTable: async (...args) => { calls.push(['table', ...args]); },
     capEnvironment: async (...args) => { calls.push(['environment', ...args]); },
   };
-  await commands.execute('debugger', commands.argumentsFor('debugger', '--environment env-1'), '/app', fake);
+  await commands.execute('deploy', commands.argumentsFor('deploy', '--debugger --environment env-1'), '/app', fake);
   await commands.execute('add-dataverse', commands.argumentsFor('add-dataverse', 'account --environment env-1'), '/app', fake);
   await commands.execute('create-table', commands.argumentsFor('create-table', '--display-name Project --field "Status:choice:New|Active"'), '/app', fake);
-  await commands.execute('change-environment', commands.argumentsFor('change-environment', 'env-2'), '/app', fake);
-  assert.deepEqual(calls[0][1], { cwd: '/app', debugger: true, passthroughArgs: ['--environment-id', 'env-1'] });
+  assert.deepEqual(calls[0][1], { cwd: '/app', debugger: true, passthroughArgs: ['--non-interactive', '--environment-id', 'env-1'] });
   assert.equal(calls[1][1], 'account');
   assert.equal(calls[1][2].namedArgs.environment, 'env-1');
   assert.equal(calls[1][2].preserveGeneratedArtifacts, true);
   assert.deepEqual(calls[2][1].fields, [{ displayName: 'Status', type: 'choice', options: 'New|Active' }]);
-  assert.equal(calls[3][1], 'env-2');
   fake.listEnvironments = async () => [{ name: 'env-3' }];
   assert.deepEqual(await commands.execute('change-environment', {}, '/app', fake), [{ name: 'env-3' }]);
   assert.throws(() => commands.argumentsFor('deploy', '--unrecognized'), /Unknown option/);
@@ -197,6 +203,8 @@ test('panel exposes every CAP operation and converts optional form fields correc
   for (const name of ['import', 'change-environment', 'add-flow', 'add-dataverse', 'add-connector']) {
     assert.ok(operations.find((operation) => operation.name === name).fields.some((field) => field.resource && field.required));
   }
+  assert.ok(operations.find((operation) => operation.name === 'add-flow').fields.some((field) => field.key === 'flowId' && !field.resource));
+  assert.ok(operations.find((operation) => operation.name === 'skills').fields.some((field) => field.resource === 'skills'));
 });
 
 test('pre-chat runner explicitly scopes every request and never creates or prompts a session', async () => {
@@ -223,9 +231,9 @@ test('pre-chat runner explicitly scopes every request and never creates or promp
 
 test('sign-in uses authentication without requiring app configuration', async () => {
   const calls = [];
-  const api = { capAuth: async (options) => { calls.push(options); return { authenticated: true }; } };
+  const api = { capAuth: async (...args) => { calls.push(args); return { authenticated: true }; } };
   assert.deepEqual(await commands.execute('sign-in', { cloud: 'us' }, 'C:/dev/new-code-app', api), { authenticated: true });
-  assert.deepEqual(calls, [{ cwd: 'C:/dev/new-code-app', namedArgs: { cloud: 'us' } }]);
+  assert.deepEqual(calls, [[[], { cwd: 'C:/dev/new-code-app', namedArgs: { cloud: 'us' } }]]);
 });
 
 test('restored Code App tabs are pruned only in verified non-Code-App folders', async () => {
@@ -414,15 +422,16 @@ test('section actions run directly, resource selections run once, and environmen
   }, { jsx: (type, props, ...children) => ({ type, props: props || {}, children }) });
   const saved = { folder: 'C:/apps/example', environment: 'last-environment' };
   const calls = [];
+  const confirmations = [];
   let approve = true;
   let fail = false;
   const props = {
     ctx: {
       stores: { workspace: { value: saved, update: (mutate) => mutate(saved) } },
-      dialogs: { confirm: async () => approve },
+      dialogs: { confirm: async (input) => { confirmations.push(input); return approve; } },
     },
     directory: saved.folder,
-    run: { execute: async (name, input) => { calls.push({ name, input }); if (fail) throw new Error('request failed'); return 'done'; }, list: async () => [] },
+    run: { execute: async (name, input) => { calls.push({ name, input }); if (fail) throw new Error('request failed'); return name === 'skills' ? JSON.stringify({ name: input.skill, content: '# CLI instructions' }) : 'done'; }, list: async () => [] },
   };
   const flatten = (node) => {
     if (!node || typeof node !== 'object') return [];
@@ -465,6 +474,35 @@ test('section actions run directly, resource selections run once, and environmen
   assert.ok(render().some((node) => node.props.role === 'alert' && node.children[0].includes('request failed')));
   assert.equal(action('Change environment').props.disabled, false, 'failure releases busy state');
   assert.ok(!render().some((node) => node.type === 'button' && node.props.type === 'submit'), 'no duplicate submit button below the sections');
+
+  fail = false;
+  const beforeSkill = confirmations.length;
+  action('Browse skills').props.onClick();
+  render().find((node) => node.props.label === 'Skill').props.choose('cap-cli');
+  await settle();
+  assert.equal(confirmations.length, beforeSkill, 'reading bundled skills is not a mutation');
+  assert.equal(calls.at(-1).input.skill, 'cap-cli');
+  assert.ok(render().some((node) => node.type === 'pre' && node.children[0] === '# CLI instructions'));
+  assert.ok(render().some((node) => node.props.class === 'cap-result' && node.props.open));
+
+  approve = false;
+  const beforeLogout = calls.length;
+  action('Log out').props.onClick();
+  await settle();
+  assert.equal(calls.length, beforeLogout, 'cancelled logout never clears authentication');
+  approve = true;
+  action('Change authentication account').props.onClick();
+  await settle();
+  assert.equal(calls.at(-1).name, 'change-account');
+
+  action('Add flow').props.onClick();
+  const manualFlow = render().find((node) => node.type === 'label' && flatten(node).some((child) => child.type === 'span' && child.children[0] === 'Flow ID (manual entry)'));
+  flatten(manualFlow).find((node) => node.type === 'input').props.onInput({ currentTarget: { value: 'typed-flow-id' } });
+  action('Add flow').props.onClick();
+  await settle();
+  assert.equal(calls.at(-1).name, 'add-flow');
+  assert.equal(calls.at(-1).input.flowId, 'typed-flow-id', 'manual ID works without a list selection');
+  action('Change environment').props.onClick();
 
   const resource = render().find((node) => node.props.label === 'Environment');
   const beforeRefresh = calls.length;
