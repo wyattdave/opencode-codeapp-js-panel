@@ -14,6 +14,8 @@ test('all requested operations are registered and dispatch to Power Apps functio
   const { default: plugin } = await import('../index.mjs');
   await plugin.setup({
     location: { directory: 'test-project' },
+    agent: { transform: async (fn) => fn({ get: () => undefined, update: (_id, update) => update({ permissions: [] }) }) },
+    skill: { transform: async (fn) => fn({ get: () => undefined, add: () => {} }) },
     rpc: { register: async (definition, handlers) => { rpc = { definition, handlers }; } },
     command: { transform: async (fn) => fn({ add: (definition) => installed.set(definition.name, definition) }) },
     tool: { transform: async (fn) => fn({

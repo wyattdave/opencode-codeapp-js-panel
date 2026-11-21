@@ -30,6 +30,14 @@ function codeappRoot() {
   return path.dirname(require.resolve('codeapp-js/package.json'));
 }
 
+async function codeappInstructions() {
+  const sourcePath = path.join(codeappRoot(), 'AI', 'codeapp.agent.md');
+  const source = await fs.readFile(sourcePath, 'utf8');
+  // Copilot's name and argument-hint are not OpenCode agent frontmatter fields.
+  const system = source.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  return { sourcePath, system };
+}
+
 async function inspectWorkspace(cwd) {
   for (const name of ['power.config.json', 'setup/power.config.json']) {
     try {
@@ -94,10 +102,7 @@ async function ensureCodeappWorkspace(cwd, options = {}) {
   const agentPath = path.join(cwd, '.opencode', 'agents', 'codeapp.md');
   await fs.mkdir(path.dirname(agentPath), { recursive: true });
 
-  const source = await fs.readFile(path.join(root, 'AI', 'codeapp.agent.md'), 'utf8');
-  // OpenCode reads the Markdown body as the agent's system prompt; name and
-  // argument-hint from the bundled format are not V2 agent frontmatter fields.
-  const body = source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  const { system: body } = await codeappInstructions();
   const agent = `---\ndescription: Build Microsoft Power Platform CodeApps with the bundled codeapp-js instructions\nmode: primary\npermissions:\n  - action: cap_mutation\n    resource: "*"\n    effect: ask\n---\n\n${body}`;
   // Never replace a user's customized agent.
   const agentCreated = await copyIfAbsentFromContent(agent, agentPath);
@@ -174,4 +179,4 @@ async function copyIfAbsentFromContent(content, destination) {
   }
 }
 
-module.exports = { ensureCodeappWorkspace, setupWorkspace, inspectWorkspace, listSkills, readSkill, toggleDebugger };
+module.exports = { ensureCodeappWorkspace, setupWorkspace, inspectWorkspace, listSkills, readSkill, toggleDebugger, codeappInstructions };

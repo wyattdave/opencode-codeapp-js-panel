@@ -4,6 +4,7 @@ import resources from './resources.js';
 import { Cap } from './rpc.mjs';
 import queue from './queue.js';
 import workspace from './workspace.js';
+import { registerProfiles } from './profiles.mjs';
 
 const string = (description) => ({ type: 'string', description });
 const fields = {
@@ -54,6 +55,7 @@ export default Plugin.define({
   id: 'codeapp-js',
   async setup(ctx) {
     const cwd = ctx.location.directory;
+    await registerProfiles(ctx);
     await ctx.rpc.register(Cap, {
       project: async () => workspace.inspectWorkspace(cwd),
       execute: async ({ name, input }) => queue.exclusive(async () => JSON.stringify(await commands.execute(name, input, cwd) ?? { completed: true }, null, 2)),
